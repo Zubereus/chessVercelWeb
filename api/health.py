@@ -1,3 +1,15 @@
+from http.server import BaseHTTPRequestHandler
+
 from api import create_handler
 
-handler = create_handler("health")
+_api_handler = create_handler("health")
+
+
+class handler(BaseHTTPRequestHandler):
+    """Expose the health endpoint using Vercel's Python handler entrypoint."""
+
+    send_json = _api_handler.send_json
+    read_json = _api_handler.read_json
+    do_GET = _api_handler.do_GET
+    do_POST = _api_handler.do_POST
+    log_message = _api_handler.log_message
