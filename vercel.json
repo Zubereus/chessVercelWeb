@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/*.py": {
+    "api/**/*.py": {
       "maxDuration": 10,
       "includeFiles": "src/**",
       "excludeFiles": "{assets/**,tests/**,experiments/**,public/**,main.py,process.py,src/menu/**,src/setting.py,src/chess_replicated/ui.py,src/chess_replicated/display.py,src/chess_replicated/mouse_repeat.py,src/chess_replicated/alphabeta.py}"
