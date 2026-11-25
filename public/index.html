@@ -31,6 +31,64 @@
             </select>
           </div>
 
+          <div class="field-block">
+            <label for="start-position">Starting position</label>
+            <select id="start-position" name="start-position">
+              <option value="standard">Standard board</option>
+              <option value="custom">Custom board</option>
+            </select>
+          </div>
+
+          <section id="custom-editor" class="custom-editor" aria-labelledby="custom-editor-title" hidden>
+            <div class="custom-editor-heading">
+              <div>
+                <h2 id="custom-editor-title">Custom board</h2>
+                <p class="muted-copy">Place pieces yourself or set counts for a random layout.</p>
+              </div>
+              <button id="custom-reset" class="button button-light" type="button">Reset board</button>
+            </div>
+            <div class="custom-editor-layout">
+              <div class="custom-board-column">
+                <div class="custom-board-wrap board-wrap">
+                  <div class="rank-labels" aria-hidden="true"><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
+                  <div id="custom-board" class="chess-board custom-board" role="grid" aria-label="Custom starting board"></div>
+                  <div class="file-labels" aria-hidden="true"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span></div>
+                </div>
+                <p id="custom-board-message" class="custom-board-message" role="status" aria-live="polite"></p>
+              </div>
+
+              <div class="custom-editor-tools">
+                <div id="custom-method" class="custom-method" role="group" aria-label="Piece placement method">
+                  <button class="button button-light" type="button" data-custom-method="manual" aria-pressed="true">Place pieces</button>
+                  <button class="button button-light" type="button" data-custom-method="random" aria-pressed="false">Random layout</button>
+                </div>
+
+                <div id="manual-tools" class="manual-tools">
+                  <div class="field-block">
+                    <label for="custom-piece-color">Piece color</label>
+                    <select id="custom-piece-color" name="custom-piece-color">
+                      <option value="white">White</option>
+                      <option value="black">Black</option>
+                    </select>
+                  </div>
+                  <div class="field-block">
+                    <span class="tool-label">Choose a piece</span>
+                    <div id="custom-piece-palette" class="custom-piece-palette" role="group" aria-label="Choose piece type"></div>
+                  </div>
+                  <button id="custom-erase" class="button button-light" type="button" aria-pressed="false">Remove piece</button>
+                  <p id="custom-tool-hint" class="help-copy">Choose a piece, then select a square.</p>
+                </div>
+
+                <div id="random-tools" class="random-tools" hidden>
+                  <p class="help-copy">Choose counts for each side. Kings are included automatically.</p>
+                  <div id="random-counts" class="random-counts"></div>
+                  <p id="random-count-summary" class="help-copy"></p>
+                  <button id="randomize-board" class="button button-primary button-wide" type="button">Randomize placement</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <div id="human-algorithm-field" class="field-block">
             <label for="human-algorithm">Black’s algorithm</label>
             <select id="human-algorithm" name="human-algorithm">
