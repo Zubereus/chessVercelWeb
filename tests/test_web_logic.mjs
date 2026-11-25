@@ -7,6 +7,7 @@ const {
   buildCustomPosition,
   indexToSquare,
   makeGamePayload,
+  movesMatch,
   randomizeCustomPieces,
   squareToIndex,
   validateCustomPieces,
@@ -25,6 +26,10 @@ const moves = [{ from: "e2", to: "e4" }];
 const payload = makeGamePayload({ type: "standard" }, moves);
 assert.deepEqual(payload, { start_position: { type: "standard" }, moves });
 assert.notEqual(payload.moves, moves);
+
+// Distinguish promotions while matching ordinary move coordinates.
+assert.equal(movesMatch({ from: "a7", to: "a8", promotion: "Q" }, { from: "a7", to: "a8", promotion: "Q" }), true);
+assert.equal(movesMatch({ from: "a7", to: "a8", promotion: "Q" }, { from: "a7", to: "a8", promotion: "N" }), false);
 
 // Verify a hand-built position uses the API's custom start format.
 const customPieces = [

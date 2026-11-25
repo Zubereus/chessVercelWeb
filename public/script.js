@@ -10,6 +10,11 @@ const MAX_DEPTH = 8;
 const MAX_MCTS_ITERATIONS = 500;
 const CUSTOM_PIECE_TYPES = ["king", "queen", "bishop", "knight", "rook", "pawn"];
 const CUSTOM_PIECE_LIMITS = { king: 1, queen: 1, bishop: 2, knight: 2, rook: 2, pawn: 8 };
+const PRACTICE_LEVELS = {
+  gentle: { depth: 1, iterations: 25 },
+  club: { depth: 2, iterations: 100 },
+  strong: { depth: 4, iterations: 300 },
+};
 
 // Convert an algebraic square to the engine's row-major board index.
 export function squareToIndex(square) {
@@ -24,6 +29,11 @@ export function indexToSquare(index) {
 // Build the full replay payload required by every stateless game endpoint.
 export function makeGamePayload(startPosition, moves) {
   return { start_position: startPosition, moves: [...moves] };
+}
+
+// Compare move identity, including promotion choice.
+export function movesMatch(first, second) {
+  return first.from === second.from && first.to === second.to && (first.promotion || "") === (second.promotion || "");
 }
 
 // Check the custom placement against the API's starting-position rules.
@@ -140,6 +150,10 @@ function initializePage() {
     customMessage: "",
     randomCounts: makeDefaultRandomCounts(),
     mode: "human",
+    practiceLevel: "gentle",
+    coachHint: null,
+    coachNote: "",
+    coachLoading: false,
     algorithms: { white: "alphabeta", black: "alphabeta" },
     depth: 2,
     iterations: 100,
@@ -166,6 +180,8 @@ function getElements() {
     setupScreen: document.querySelector("#setup-screen"),
     setupForm: document.querySelector("#setup-form"),
     gameMode: document.querySelector("#game-mode"),
+    practiceLevelField: document.querySelector("#practice-level-field"),
+    practiceLevel: document.querySelector("#practice-level"),
     startPosition: document.querySelector("#start-position"),
     customEditor: document.querySelector("#custom-editor"),
     customBoard: document.querySelector("#custom-board"),
@@ -206,6 +222,8 @@ function getElements() {
     humanControls: document.querySelector("#human-controls"),
     aiControls: document.querySelector("#ai-controls"),
     humanRunAi: document.querySelector("#human-run-ai"),
+    coachHint: document.querySelector("#coach-hint-button"),
+    coachNote: document.querySelector("#coach-note"),
     runAi: document.querySelector("#run-ai-button"),
     auto: document.querySelector("#auto-button"),
     undo: document.querySelector("#undo-button"),
@@ -222,6 +240,10 @@ function getElements() {
 function bindEvents(state, elements) {
   // Refresh the setup fields after switching the game mode.
   elements.gameMode.addEventListener("change", () => updateSetupVisibility(state, elements));
+  // Keep the selected practice strength in the page's single state object.
+  elements.practiceLevel.addEventListener("change", () => {
+    state.practiceLevel = elements.practiceLevel.value;
+  });
   // Show or hide the custom-board editor when the starting position changes.
   elements.startPosition.addEventListener("change", () => {
     state.positionType = elements.startPosition.value;
@@ -241,6 +263,8 @@ function bindEvents(state, elements) {
   elements.setupRetry.addEventListener("click", () => retryLastRequest(state, elements));
   // Let a paused human game or AI game advance one turn.
   elements.humanRunAi.addEventListener("click", () => runAiTurn(state, elements));
+  // Ask the same engine for a suggestion without making the move.
+  elements.coachHint.addEventListener("click", () => requestCoachHint(state, elements));
   elements.runAi.addEventListener("click", () => runAiTurn(state, elements));
   // Toggle the AI-versus-AI autoplay loop.
   elements.auto.addEventListener("click", () => toggleAutoPlay(state, elements));
@@ -268,8 +292,10 @@ function bindEvents(state, elements) {
 // Show the algorithm fields that match the selected game mode.
 function updateSetupVisibility(state, elements) {
   const isAiGame = elements.gameMode.value === "ai";
+  const isPractice = elements.gameMode.value === "practice";
   elements.humanAlgorithmField.hidden = isAiGame;
   elements.aiAlgorithms.hidden = !isAiGame;
+  elements.practiceLevelField.hidden = !isPractice;
   elements.startPosition.value = state.positionType;
   elements.customEditor.hidden = state.positionType !== "custom";
   elements.setupForm.classList.toggle("has-custom-board", state.positionType === "custom");
@@ -510,9 +536,10 @@ function readSettings(state, elements) {
   }
   elements.iterationInput.setCustomValidity("");
   state.mode = elements.gameMode.value;
+  state.practiceLevel = elements.practiceLevel.value;
   state.depth = depth;
   state.iterations = iterations;
-  state.algorithms = state.mode === "human"
+  state.algorithms = isHumanMode(state)
     ? { white: "human", black: elements.humanAlgorithm.value }
     : { white: elements.whiteAlgorithm.value, black: elements.blackAlgorithm.value };
   return true;
@@ -553,6 +580,8 @@ async function startNewGame(state, elements, startingPosition = state.startPosit
     state.selectedSquare = null;
     state.pendingPromotion = null;
     state.lastAi = null;
+    state.coachHint = null;
+    state.coachNote = "";
     state.aiPaused = false;
     state.started = true;
     state.retryTask = null;
@@ -607,6 +636,12 @@ async function refreshPosition(state, elements) {
 // Move the selected human piece, then refresh status and request Black's reply.
 async function playHumanMove(state, elements, move) {
   if (state.loading || state.game.status === "checkmate" || state.game.status === "stalemate" || state.game.status === "draw") return;
+  if (state.mode === "practice" && state.coachHint) {
+    state.coachNote = movesMatch(move, state.coachHint)
+      ? "Good find. You played the engine’s top candidate."
+      : `The engine’s top candidate was ${state.coachHint.from}–${state.coachHint.to}. Consider its plan, then try without the hint next time.`;
+  }
+  state.coachHint = null;
   state.moves = [...state.moves, move];
   state.selectedSquare = null;
   state.pendingPromotion = null;
@@ -617,7 +652,7 @@ async function playHumanMove(state, elements, move) {
   const refreshed = await refreshPosition(state, elements);
   state.loading = false;
   render(state, elements);
-  if (refreshed && state.mode === "human" && currentColor(state) === "black" && !isGameOver(state)) {
+  if (refreshed && isHumanMode(state) && currentColor(state) === "black" && !isGameOver(state)) {
     await runAiTurn(state, elements);
   }
 }
@@ -626,13 +661,14 @@ async function playHumanMove(state, elements, move) {
 async function runAiTurn(state, elements) {
   if (state.loading || !state.started || isGameOver(state)) return false;
   const color = currentColor(state);
-  if (state.mode === "human" && color !== "black") return false;
+  if (isHumanMode(state) && color !== "black") return false;
   const algorithm = state.algorithms[color];
+  const practiceSearch = state.mode === "practice" ? PRACTICE_LEVELS[state.practiceLevel] : null;
   const payload = {
     ...makeGamePayload(state.startPosition, state.moves),
     algorithm,
-    depth: state.depth,
-    mcts_iterations: state.iterations,
+    depth: practiceSearch?.depth ?? state.depth,
+    mcts_iterations: practiceSearch?.iterations ?? state.iterations,
   };
   state.loading = true;
   state.error = "";
@@ -657,6 +693,35 @@ async function runAiTurn(state, elements) {
     state.loading = false;
     render(state, elements);
   }
+}
+
+// Request the engine's best candidate for the current human position.
+async function requestCoachHint(state, elements) {
+  if (state.loading || state.coachLoading || state.mode !== "practice" || currentColor(state) !== "white" || isGameOver(state)) return;
+  const search = PRACTICE_LEVELS[state.practiceLevel];
+  state.coachLoading = true;
+  state.coachNote = "The coach is checking this position…";
+  render(state, elements);
+  try {
+    const result = await postJson("/api/ai-move", {
+      ...makeGamePayload(state.startPosition, state.moves),
+      algorithm: state.algorithms.black,
+      depth: search.depth,
+      mcts_iterations: search.iterations,
+    });
+    state.coachHint = result.move;
+    state.coachNote = `Try to find the idea. The engine points to ${result.move.from}–${result.move.to}.`;
+  } catch (error) {
+    state.coachNote = `Hint unavailable: ${error.message}`;
+  } finally {
+    state.coachLoading = false;
+    render(state, elements);
+  }
+}
+
+// Identify modes where White is controlled by the player.
+function isHumanMode(state) {
+  return state.mode === "human" || state.mode === "practice";
 }
 
 // Keep asking the engine for moves until Auto is turned off or the game ends.
@@ -693,7 +758,7 @@ async function retryLastRequest(state, elements) {
     const refreshed = await refreshPosition(state, elements);
     state.loading = false;
     render(state, elements);
-    if (refreshed && state.mode === "human" && currentColor(state) === "black") await runAiTurn(state, elements);
+    if (refreshed && isHumanMode(state) && currentColor(state) === "black") await runAiTurn(state, elements);
     return;
   }
   await runAiTurn(state, elements);
@@ -710,9 +775,11 @@ async function undoLastTurn(state, elements) {
   if (state.loading || !state.moves.length) return;
   state.auto = false;
   const lastMove = state.moves[state.moves.length - 1];
-  const moveCount = state.mode === "human" && lastMove.from && currentColor(state) === "white" ? 2 : 1;
+  const moveCount = isHumanMode(state) && lastMove.from && currentColor(state) === "white" ? 2 : 1;
   state.moves = state.moves.slice(0, Math.max(0, state.moves.length - moveCount));
   state.lastAi = null;
+  state.coachHint = null;
+  state.coachNote = "";
   state.selectedSquare = null;
   state.loading = true;
   state.retryTask = "legal-moves";
@@ -735,7 +802,7 @@ function isGameOver(state) {
 // Handle selection, legal destinations, and promotion choices on the board.
 function handleBoardClick(event, state, elements) {
   const squareButton = event.target.closest("button[data-square]");
-  if (!squareButton || state.loading || state.mode !== "human" || currentColor(state) !== "white") return;
+  if (!squareButton || state.loading || !isHumanMode(state) || currentColor(state) !== "white") return;
   const square = squareButton.dataset.square;
   // Keep only legal moves from the selected source to this destination.
   const selectedMoveOptions = state.legalMoves.filter((move) => move.from === state.selectedSquare && move.to === square);
@@ -879,10 +946,11 @@ function renderBoard(state, elements) {
       button.append(image);
     }
     if (square === state.selectedSquare) button.classList.add("selected");
+    if (state.coachHint && [state.coachHint.from, state.coachHint.to].includes(square)) button.classList.add("coach-hint-square");
     if (destinations.has(square)) button.classList.add("legal-target");
     if (lastMoveSquares.includes(square)) button.classList.add("last-move");
     if (square === checkedKing) button.classList.add("in-check");
-    button.disabled = state.loading || state.mode !== "human" || currentColor(state) !== "white" || isGameOver(state);
+    button.disabled = state.loading || !isHumanMode(state) || currentColor(state) !== "white" || isGameOver(state);
     return button;
   });
   elements.board.replaceChildren(...squares);
@@ -910,7 +978,7 @@ function renderStatus(state, elements) {
     stalemate: "Draw · Stalemate",
     draw: `Draw · ${state.game.draw_reason || "draw"}`,
   };
-  const isHumanTurn = state.mode === "human" && color === "white";
+  const isHumanTurn = isHumanMode(state) && color === "white";
   elements.turnIndicator.lastElementChild.textContent = isHumanTurn ? "Your move" : `${side} to move`;
   elements.turnIndicator.querySelector(".turn-dot").classList.toggle("black", color === "black");
   elements.gameStatus.textContent = messages[status] || messages.ongoing;
@@ -919,17 +987,23 @@ function renderStatus(state, elements) {
 
 // Show the controls that match the selected mode and whether a retry is needed.
 function renderControls(state, elements) {
-  elements.humanControls.hidden = state.mode !== "human";
+  elements.humanControls.hidden = !isHumanMode(state);
   elements.aiControls.hidden = state.mode !== "ai";
-  const humanNeedsAi = state.mode === "human" && currentColor(state) === "black" && !isGameOver(state);
+  const isPractice = state.mode === "practice";
+  elements.coachHint.hidden = !isPractice || currentColor(state) !== "white" || isGameOver(state);
+  elements.coachHint.disabled = state.loading || state.coachLoading || isGameOver(state);
+  elements.coachHint.textContent = state.coachLoading ? "Thinking…" : "Get a hint";
+  elements.coachNote.hidden = !isPractice || !state.coachNote;
+  elements.coachNote.textContent = state.coachNote;
+  const humanNeedsAi = isHumanMode(state) && currentColor(state) === "black" && !isGameOver(state);
   elements.humanRunAi.hidden = !humanNeedsAi || (!state.aiPaused && !state.error);
   elements.humanRunAi.disabled = state.loading;
   elements.runAi.disabled = state.loading || isGameOver(state);
   elements.auto.disabled = isGameOver(state);
-  elements.modeSummary.textContent = state.mode === "human" ? "Human vs AI" : "AI vs AI";
+  elements.modeSummary.textContent = state.mode === "practice" ? "Practice with coach" : state.mode === "human" ? "Human vs AI" : "AI vs AI";
   // Format the selected engine for each side in the panel summary.
   const describe = (color) => `${color[0].toUpperCase()}${color.slice(1)} · ${algorithmName(state.algorithms[color])}`;
-  elements.algorithmSummary.textContent = state.mode === "human" ? describe("black") : `${describe("white")}  /  ${describe("black")}`;
+  elements.algorithmSummary.textContent = isHumanMode(state) ? `${describe("black")}${state.mode === "practice" ? ` · ${state.practiceLevel}` : ""}` : `${describe("white")}  /  ${describe("black")}`;
 }
 
 // Format the most recent AI move with the engine work report.
@@ -959,6 +1033,7 @@ function showSetup(state, elements) {
   elements.gameScreen.hidden = true;
   elements.setupScreen.hidden = false;
   elements.gameMode.value = state.mode;
+  elements.practiceLevel.value = state.practiceLevel;
   elements.humanAlgorithm.value = state.algorithms.black === "human" ? "alphabeta" : state.algorithms.black;
   elements.whiteAlgorithm.value = state.algorithms.white === "human" ? "alphabeta" : state.algorithms.white;
   elements.blackAlgorithm.value = state.algorithms.black === "human" ? "alphabeta" : state.algorithms.black;

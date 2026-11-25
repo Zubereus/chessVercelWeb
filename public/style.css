@@ -104,6 +104,7 @@ h2 { margin-bottom: 0; font-size: 18px; line-height: 1.2; letter-spacing: -.025e
 .square img { width: 86%; height: 86%; object-fit: contain; pointer-events: none; }
 .square:focus-visible { z-index: 2; outline-offset: -4px; }
 .square.selected { box-shadow: inset 0 0 0 4px var(--focus); }
+.square.coach-hint-square { box-shadow: inset 0 0 0 4px var(--green-dark); }
 .square.last-move::after { position: absolute; inset: 0; content: ""; background: var(--move-highlight); pointer-events: none; }
 .square.in-check { box-shadow: inset 0 0 0 4px var(--danger); }
 .square.legal-target::before { position: absolute; z-index: 1; width: 25%; aspect-ratio: 1; border-radius: 50%; content: ""; background: var(--move-dot); pointer-events: none; }
@@ -116,6 +117,7 @@ h2 { margin-bottom: 0; font-size: 18px; line-height: 1.2; letter-spacing: -.025e
 .text-button { width: fit-content; padding: 4px 0 0; border: 0; color: var(--green-dark); background: transparent; cursor: pointer; font-size: 12px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .text-button:hover { color: var(--ink); }
 .result-copy { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: break-word; min-width: 0; }
+.coach-note { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--green-soft); font-size: 12px; line-height: 1.5; }
 .loading-indicator { width: min(100%, 700px); display: flex; align-items: center; gap: 8px; margin: 16px auto 0; color: var(--green-dark); font-size: 12px; font-weight: 700; }
 .spinner { width: 15px; height: 15px; border: 2px solid var(--green-soft); border-top-color: var(--green-dark); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -27,7 +27,17 @@
             <label for="game-mode">Game mode</label>
             <select id="game-mode" name="game-mode">
               <option value="human">Human (White) vs AI</option>
+              <option value="practice">Practice with coach</option>
               <option value="ai">AI vs AI</option>
+            </select>
+          </div>
+
+          <div id="practice-level-field" class="field-block" hidden>
+            <label for="practice-level">Opponent strength</label>
+            <select id="practice-level" name="practice-level">
+              <option value="gentle">Gentle · shallow search</option>
+              <option value="club">Club · balanced search</option>
+              <option value="strong">Strong · deeper search</option>
             </select>
           </div>
 
@@ -177,6 +187,8 @@
 
             <div class="panel-section">
               <div id="human-controls" class="control-stack">
+                <button id="coach-hint-button" class="button button-light button-wide" type="button" hidden>Get a hint</button>
+                <p id="coach-note" class="coach-note" role="status" aria-live="polite" hidden></p>
                 <button id="human-run-ai" class="button button-primary button-wide" type="button" hidden>Run AI</button>
               </div>
               <div id="ai-controls" class="control-stack" hidden>
